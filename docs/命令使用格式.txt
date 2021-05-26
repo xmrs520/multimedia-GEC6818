@@ -1,0 +1,150 @@
+==================mplayer简介==================== 
+MPlayer是一款开源的多媒体播放器，以GNU通用公共许可证发布。
+可在各主流作业系统使用，例如Linux和其他类Unix作业系统、
+微软的视窗系统及苹果电脑的Mac OS X系统。
+MPlayer是建基于命令行界面，
+在各作业系统可选择安装不同的图形界面。
+因为linux下都是命令行的操作方式，
+所以对mplayer的各种操作都是用命令来实现的，
+这次主要用的是它的slave工作方式
+ 
+=================slave模式协议简介===================
+   默认mplayer是从键盘上获得控制信息
+   mplayer另外提供了一种更为灵活的控制方式，用来进行播放控制——slave模式
+   在slave模式下，MPlayer为后台运行其他程序，不再截获键盘事件， 
+   MPlayer会从标准输入读一个换行符（\n）分隔开的命令。
+ 
+==================常用到的 Mplayer指令==================
+mute [value]
+    Toggle sound output muting or set it to [value] when [value] >= 0
+    (1 == on, 0 == off).
+
+seek <value> [type]
+    Seek to some place in the movie.
+        0 is a relative seek of +/- <value> seconds (default).
+        1 is a seek to <value> % in the movie.
+        2 is a seek to an absolute position of <value> seconds.
+
+vo_border [value]
+    Toggle/set borderless display.
+/设置无边界的显示切换。
+vo_fullscreen [value]
+    Toggle/set fullscreen mode.
+切换/设置全屏模式
+
+
+
+
+switch_ratio [value]
+    Change aspect ratio at runtime. [value] is the new aspect ratio expressed
+    as a float (e.g. 1.77778 for 16/9), or special value -1 to reset to
+    original aspect ratio (ditto if [value] is missing), or special value 0
+    to disable automatic movie aspect ratio compensation.
+    There might be problems with some video filters.
+
+在运行时改变长宽比。[value]为新设置的纵横比
+
+作为浮点数(例如:1.77778表示16/9)，或特殊值-1重置为
+
+原始的长宽比(如果[value]缺失，也一样)，或者特殊值0
+
+禁用自动电影宽高比补偿。
+
+可能有一些视频过滤器的问题。
+
+
+loadfile   string   //参数string 为 歌曲名字。 
+volume 100 1        //设置音量 中间的为音量的大小。
+mute  1/0           //静音开关
+pause               //暂停/取消暂停
+get_time_length     //返回值是播放文件的长度，以秒为单位。
+seek value          //向前查找到文件的位置播放 参数value为秒数。
+get_percent_pos     //返回文件的百分比（0--100）                                //用来拖动进度条
+get_time_pos        //打印出在文件的当前位置用秒表示，采用浮点数
+volume  [abs]       //增大/减小音量，或将其设置为，如果[abs]不为零
+quit [value]        //退出MPlayer。可选的整数[value]的值作为返回代码为mplayer的进程（默认值：0）。
+ 
+get_file_name    //打印出当前文件名 
+get_meta_album   //打印出当前文件的'专辑'的元数据
+get_meta_artist  //打印出当前文件的'艺术家'的元数据
+get_meta_comment //打印出当前文件的'评论'的元数据
+get_meta_genre   //打印出当前文件的'流派'的元数据
+get_meta_title   //打印出当前文件的'标题'的元数据
+get_meta_year    //打印出当前文件的'年份'的元数据
+
+
+==============方法一：代码实现输入控制命令方法====================
+fd 就是打开的管道文件。  注意：在arm开发板上字符串不要加\r   
+
+----------------------创建管道文件------------------------------------
+int mkfifo()
+{
+    //判断文件是否存在
+	if(access("/tmp/fifo",F_OK))
+	{
+		//创建管道文件，在开发板/tmp下面创建一个fifo的管道文件
+		int ret=mkfifo("/tmp/fifo",0777);
+		if(ret < 0)
+		{
+			perror("mkfifo /tmp/fifo false!\n");
+			return -1;
+		}
+	}
+	//打开管道文件
+	int fifo_fd=open("/tmp/fifo",O_RDWR);
+	if(fifo_fd == -1)
+	{
+		perror("open error!\n");
+		return -1;
+	}
+	return 0; 
+}
+
+-------------------写入控制数据命令-------------
+
+ write(fd, "pause\r\n",strlen("pause\n")); 命令，
+ 用 -slave 使其与键盘分离，记住，当与键盘分离后，
+mplayer接受的命令都是以\n结尾的命令，
+而且命令之后需要参数，命令和参数之间至少要有一个空格，
+不然起不到效果。
+ 
+write(fd,"volume +5\n",strlen("volume +5\n"));加声音
+write(fd,"volume -5\n",strlen("volume -5\n"));减声音
+ 
+write(fd,"seek -5\n",strlen("seek -5\n"));快退。
+write(fd,"seek +5\n",strlen("seek -5\n"));快进。
+
+等等的命令，用法格式都是一样的，对照着官网手册，就可以设计了
+
+
+==============方法二：命令实现输入控制命令方法==================== 
+步骤：
+    #mkfifo 
+    
+    #mplayer  -slave  -input  file= 
+    //命令输入的管道文件  
+     -input  file=/pipe 
+	 
+    //用户可以通过往管道里写入slave命令来实现对应的功能
+ 
+------------------创建管道文件---------------------------------------
+  创建命令输入的管道文件  （使用命令控制播放必须要管道存在）
+  mkfifo   /pipe  
+  chmod 777 /pipe  
+ 
+----------------------写入的例子-------------------
+
+注意：写入命令时一定要确保管道文件已经创建成功！！
+
+静音写入： 
+echo mute  1  >  /pipe    system("echo mute  1  >  /pipe ")
+
+暂停写入： 
+echo pause    >  /pipe 
+
+音量增加： 
+echo volume +10    >  /pipe 
+
+快进： 
+echo seek  +10  >  /pipe 
+ 
