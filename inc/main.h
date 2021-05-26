@@ -126,43 +126,15 @@ typedef struct link
   struct qnode *rear;
 } link_queue, *link_queue_p;
 
-/**
- * 棋子信息
-*/
-typedef struct chess_pieces_info
-{
-  int id;
-  int x;
-  int y;
-  int level;
-  int role;     //0: 红方 1: 蓝方
-  int show;     //0: 不显示 1: 显示
-  int selected; //0: 未选中 1: 选中
-  char path[256];
-  struct chess_pieces_info *next;
-  struct chess_pieces_info *prev;
-} chess_info, *chess_info_p;
-
-/**
- * 走棋记录
-*/
-typedef struct chess_pieces_backup
-{
-  int id;
-  int x;
-  int y;
-  int show;
-} chess_backup, *chess_backup_p;
-
-/**
- * 走棋记录 链栈管理
-*/
-typedef struct stack
-{
-  int size;        //栈大小
-  struct key *top; //栈顶
-} link_stack, *link_stack_p;
 /****************welcome.c start*****************************************************/
+
+/**
+ * 打印图片到屏幕
+ * filename : 图片路径
+ * setx,sety:要显示图片的起始位置
+ * clean:是否清屏
+*/
+int display_picture(char *filename, int setx, int sety, bool clean);
 
 /**
  * 进度条
@@ -182,11 +154,6 @@ bool welcome();
  * 获取坐标
 */
 int get_xy(xy *p);
-
-/**
- * 获取坐标 plus
-*/
-bool get_xy_plus(xy *p);
 
 /**
  * 是否在触摸键区域
@@ -362,20 +329,6 @@ int Display_characterX(unsigned int x,        //x坐标起始点
                        unsigned char *string, //GB2312 中文字符串
                        unsigned int color,    //字体颜色值
                        int size);             //字体放大倍数 1~8
-
-/**
- * 打印图片到屏幕
- * filename : 图片路径
- * setx,sety:要显示图片的起始位置
- * clean:是否清屏
-*/
-int display_picture(char *filename, int setx, int sety, bool clean);
-
-/**
- * 圆形图片
-*/
-int display_picture_circle(char *filename, int setx, int sety, bool clean);
-
 /****************tool.c end *****************************************************/
 
 /****************lrc.c start *****************************************************/
@@ -393,14 +346,5 @@ bool display_lrc(link_queue_p q);
 void destroy_queue(link_queue_p q);
 
 /****************lrc.c end *****************************************************/
-
-/****************game.c start *****************************************************/
-
-/**
- * 皇家战棋
-*/
-void games(xy *p);
-
-/****************game.c end *****************************************************/
 
 #endif

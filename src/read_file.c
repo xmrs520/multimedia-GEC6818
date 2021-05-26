@@ -23,7 +23,6 @@ bool read_pictrue_path(char *name, char *path)
       if (strcmp(getname, name) == 0)
       {
         sscanf(buf, "%*[^:]:%s", path);
-        fclose(fp);
         return true;
       }
     }
@@ -95,7 +94,7 @@ int read_music_list(music_list_p head)
       bzero(singer, sizeof(singer));
       bzero(path, sizeof(path));
     }
-    fclose(fp);
+
     return index;
   }
   else
@@ -135,7 +134,6 @@ int read_video_list(video_list_p head)
         page++;
       video_create_node(head, name, path, index, page);
     }
-    fclose(fp);
     return index;
   }
   else

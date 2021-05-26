@@ -74,15 +74,14 @@ video_list_p find_video(video_list_p head, int *n)
 */
 void destroy_video_list(video_list_p head)
 {
-  video_list_p p = head->next;
+  video_list_p p = head;
   video_list_p q = p->next;
-  while (q != head)
+  while (p->next != head)
   {
     free(p);
     p = q;
-    q = p->next;
+    q = q->next;
   }
-  free(p);
   free(q);
 }
 
@@ -108,7 +107,7 @@ void display_video_list(video_list_p head)
 */
 int show_video_list(video_list_p video_head, int pages, int indexs)
 {
-  int tail = 0; //当前页总共个数
+  int tail = 0;
   char path[100];
   video_list_p p = video_head->next;
   int offset = 0;
@@ -130,8 +129,6 @@ int show_video_list(video_list_p video_head, int pages, int indexs)
 
 /**
  * 视频首页初始化
- * tail: 当前页总共个数
- * index：视频序号
 */
 int init_video_interface(video_list_p video_head, int *tail, int indexs)
 {
@@ -155,25 +152,7 @@ int init_video_interface(video_list_p video_head, int *tail, int indexs)
 }
 
 /**
- * 视频首页
-*/
-void loading_video_interface(video_list_p video_head, int pages, int indexs)
-{
-  char path[100];
-  bzero(path, sizeof(path));
-  read_pictrue_path("video_bg", path);
-  display_picture(path, 0, 0, false);
-  bzero(path, sizeof(path));
-  read_pictrue_path("bofang_v", path);
-  display_picture(path, 0, 439, false);
-  bzero(path, sizeof(path));
-  read_pictrue_path("shengyin_v", path);
-  display_picture(path, 310, 440, false);
-  show_video_list(video_head, pages, indexs);
-}
-/**
  * 视频列表处理
- * No: 当前页的第n个视频
 */
 void video_list_handle(int *No, int tail, xy *p)
 {
@@ -453,9 +432,10 @@ void *video_return_write(void *arg)
   //映射内存空间
   shmbuf *share = (shmbuf *)shmat(shmid, NULL, 0);
   memcpy(&data, share, sizeof(data));
-  if (args->arg2 != NULL)
-    data.pause = atoi(args->arg2);
+  if (args->arg4[2] != NULL)
+    data.pause = atoi(args->arg4[2]);
   memcpy(share, &data, sizeof(data));
+
   shmdt(share);
   //读写解锁
   pthread_rwlock_unlock(rwlock);
@@ -563,7 +543,7 @@ void video_progress_bar(int shmid, pthread_rwlock_t *rwlock)
       font_tools(time_str, 68, 451, 20, 0x00ffffff, 63, 20, 0x00000000);
     }
   }
-  printf("log-xmrs: 进度条结束\n");
+  printf("进度条结束\n");
 }
 
 /**
@@ -668,7 +648,7 @@ void vdieo_play(int shmid, int msgid, pthread_rwlock_t *rwlock, video_list_p lis
       sleep(1);
       continue;
     }
-    else if (atoi(play_flag) == -1 || atoi(play_pos) > atoi(tmp) - 5)
+    else if (atoi(play_flag) == -1 || atoi(play_flag) > atoi(tmp) - 5)
     {
       break;
     }
@@ -788,7 +768,7 @@ void voide_pause(bool *flag, int shmid, int msgid, pthread_rwlock_t *rwlock)
     *flag = false;
   }
   //close(fifo_fd);
-  printf("log-xmrs:暂停结束\n");
+  printf("暂停结束\n");
 }
 
 /**
@@ -796,27 +776,22 @@ void voide_pause(bool *flag, int shmid, int msgid, pthread_rwlock_t *rwlock)
 */
 
 /**
- * 全屏播放
+ * 全屏
 */
 void full_screen(int shmid, int msgid, pthread_rwlock_t *rwlock, video_list_p list, xy *p)
 {
   char seek[100];
   char play_pos[4];
   char pos[4];
+  char flag[2] = "-1";
   char vdieo_cmd[512];
   char buf[256];
   FILE *mp;
-  char pause[1] = {"1"};
-  bool flag = false;
-  char play_flag[2] = {"1"};
-  char tmp[5];
-  int i = 0;
-  /*发送播放结束*/
   //创建任务参数
   struct arg *task_arg3 = (struct arg *)malloc(sizeof(struct arg));
   task_arg3->arg1 = shmid;
   task_arg3->ptr[0] = (void *)rwlock;
-  strcpy(task_arg3->arg2, "-1");
+  task_arg3->arg4[2] = flag;
   //发送播放结束
   pthread_t thread4;
   //创建线程
@@ -824,180 +799,6 @@ void full_screen(int shmid, int msgid, pthread_rwlock_t *rwlock, video_list_p li
   //回收子线程
   pthread_join(thread4, NULL);
 
-  sleep(1);
-
-  /*读取进度*/
-  //创建任务参数
-  struct arg *task_arg = (struct arg *)malloc(sizeof(struct arg));
-  task_arg->arg1 = shmid;
-  task_arg->ptr[0] = (void *)rwlock;
-  task_arg->arg4[0] = pos;
-  pthread_t thread8;
-  //创建线程
-  pthread_create(&thread8, NULL, bar_read_pos, (void *)task_arg);
-  //回收子线程
-  pthread_join(thread8, NULL);
-
-  system("killall -9 mplayer");
-
-  bzero(vdieo_cmd, sizeof(vdieo_cmd));
-  sprintf(vdieo_cmd,
-          "mplayer -slave -quiet -input file=/tmp/fifo %s &",
-          list->path);
-  mp = popen(vdieo_cmd, "r");
-
-  //打开管道文件
-  int fifo_fd = open("/tmp/fifo", O_RDWR);
-  if (fifo_fd == -1)
-  {
-    perror("open 管道 error!");
-  }
-
-  if (atoi(pos) < 3)
-    strcpy(pos, "2");
-  sprintf(seek, "seek %s\n", pos);
-  write(fifo_fd, seek, strlen(seek) + 1);
-
-  //创建任务参数 发送开始播放 “1”
-  struct arg *task_arg2 = (struct arg *)malloc(sizeof(struct arg));
-  task_arg2->arg1 = shmid;
-  task_arg2->ptr[0] = (void *)rwlock;
-  task_arg2->arg4[2] = pause;
-
-  pthread_t thread;
-  //创建线程
-  pthread_create(&thread, NULL, pause_write_play_flag, (void *)task_arg2);
-  //回收子线程
-  pthread_join(thread, NULL);
-
-  //发送进度
-  while (1)
-  {
-    sleep(1);
-    //创建任务参数 读取播放标志
-    struct arg *task_arg1 = (struct arg *)malloc(sizeof(struct arg));
-    task_arg1->arg1 = shmid;
-    task_arg1->ptr[0] = (void *)rwlock;
-    task_arg1->arg4[2] = play_flag;
-
-    // 读取播放标志
-    pthread_t thread1;
-    //创建线程
-    pthread_create(&thread1, NULL, play_read_play_flag, (void *)task_arg1);
-    //回收子线程
-    pthread_join(thread1, NULL);
-
-    printf("全屏播放 play_flag %s \n", play_flag);
-
-    if (atoi(play_flag) == 0)
-      strcpy(play_flag, "1");
-
-    if (atoi(play_flag) == 2)
-    {
-      if (!flag)
-      {
-        printf("--------------------\n");
-        //获取进度
-        // if (write(fifo_fd, "get_time_pos\n", strlen("get_time_pos\n")) != strlen("get_time_pos\n"))
-        //   perror("write get_time_pos");
-
-        write(fifo_fd, "get_time_pos\n", strlen("get_time_pos\n"));
-        do
-        {
-          bzero(buf, sizeof(buf));
-          fgets(buf, sizeof(buf), mp);
-          printf("%s", buf);
-          write(fifo_fd, "get_time_pos\n", strlen("get_time_pos\n"));
-        } while (strncmp(buf, "ANS_TIME_POSITION=", strlen("ANS_TIME_POSITION=")) != 0);
-        bzero(play_pos, sizeof(play_pos));
-        sscanf(buf, "%*[^=]=%s", play_pos);
-        printf("play_pos %s \n", play_pos);
-
-        //创建任务参数 发送进度
-        struct arg *task_arg = (struct arg *)malloc(sizeof(struct arg));
-        task_arg->arg1 = shmid;
-        task_arg->ptr[0] = (void *)rwlock;
-        task_arg->arg4[0] = play_pos; // 发送进度
-        pthread_t thread;
-        //创建线程
-        pthread_create(&thread, NULL, play_write_pos, (void *)task_arg);
-        //回收子线程
-        pthread_join(thread, NULL);
-
-        write(fifo_fd, "pause\n", strlen("pause\n"));
-        flag = true;
-        printf("全屏播放 暂停\n");
-      }
-    }
-    else if (atoi(play_flag) == -1)
-    {
-      break;
-    }
-    else if (atoi(play_flag) == 1)
-    {
-      if (flag)
-      {
-        printf("全屏播放 播放\n");
-        write(fifo_fd, "pause\n", strlen("pause\n"));
-        flag = false;
-      }
-    }
-  }
-  system("killall -9 mplayer");
-  printf("log-xmrs: 全屏播放结束\n");
-  pclose(mp);
-  close(fifo_fd);
-}
-
-/**
- * 全屏控制
-*/
-void full_screen_control(int shmid, pthread_rwlock_t *rwlock, video_list_p video_head, int pages, int n, xy *p)
-{
-  char buf[100];
-  char path[100];
-  char pos[4];
-  char pause[1] = {"1"};
-  char time[100];
-  char time_str[10];
-
-  //从 播放---->暂停
-  strcpy(pause, "2");
-  //创建任务参数
-  struct arg *task_arg9 = (struct arg *)malloc(sizeof(struct arg));
-  task_arg9->arg1 = shmid;
-  task_arg9->ptr[0] = (void *)rwlock;
-  task_arg9->arg4[2] = pause;
-
-  pthread_t thread1;
-  //创建线程
-  pthread_create(&thread1, NULL, pause_write_play_flag, (void *)task_arg9);
-  //回收子线程
-  pthread_join(thread1, NULL);
-
-  sleep(1);
-  bzero(path, sizeof(path));
-  read_pictrue_path("full_top", path);
-  display_picture(path, 0, 0, false);
-  bzero(path, sizeof(path));
-  read_pictrue_path("full_bottom", path);
-  display_picture(path, 0, 442, false);
-
-  //创建任务参数 总时长
-  struct arg *task_arg4 = (struct arg *)malloc(sizeof(struct arg));
-  task_arg4->arg1 = shmid;
-  task_arg4->ptr[0] = (void *)rwlock;
-  task_arg4->arg4[3] = time;
-  //读取总时长
-  pthread_t thread5;
-  //创建线程
-  pthread_create(&thread5, NULL, bar_read_time, (void *)task_arg4);
-  //回收子线程
-  pthread_join(thread5, NULL);
-  time_format(atoi(time), time_str, true);
-  font_tools(time_str, 204, 453, 20, 0x00ffffff, 63, 20, 0x00000000);
-
-  /*读取进度*/
   //创建任务参数
   struct arg *task_arg = (struct arg *)malloc(sizeof(struct arg));
   task_arg->arg1 = shmid;
@@ -1008,76 +809,56 @@ void full_screen_control(int shmid, pthread_rwlock_t *rwlock, video_list_p video
   pthread_create(&thread, NULL, bar_read_pos, (void *)task_arg);
   //回收子线程
   pthread_join(thread, NULL);
-  time_format(atoi(pos), time_str, true);
-  font_tools(time_str, 122, 453, 20, 0x00ffffff, 63, 20, 0x00000000);
 
-  int pos_t;
-  int lcd_fd = open(LCD_PATH, O_RDWR);
-  if (lcd_fd < 0)
+  //打开管道文件
+  int fifo_fd = open("/tmp/fifo", O_RDWR);
+  if (fifo_fd == -1)
   {
-    perror("Failed to open lcd\n");
+    perror("open 管道 error!");
   }
-  int x = 0, y;
-  int color = 0x003486fa;
-  int *share_addr = NULL;
-  share_addr = mmap(NULL, 800 * 480 * 4, PROT_READ | PROT_WRITE, MAP_SHARED, lcd_fd, 0);
-  if (share_addr == MAP_FAILED)
-  {
-    perror("mmap failed\n");
-  }
-  pos_t = (int)ceil(800 / (double)atoi(time) * atoi(pos));
-  for (x = 0; x <= pos_t; x++)
-  {
-    for (y = 0; y < 5; y++)
-      memcpy(share_addr + x + (y + 435) * 800, &color, 4);
-  }
-  munmap(share_addr, 800 * 480 * 4);
-  close(lcd_fd);
 
-  while (1)
-  {
-    get_xy(p);
-    // 退出全屏
-    if (is_key_area(p, 726, 442, 800, 480))
-    {
-      //创建任务参数
-      struct arg *task_arg3 = (struct arg *)malloc(sizeof(struct arg));
-      task_arg3->arg1 = shmid;
-      task_arg3->ptr[0] = (void *)rwlock;
-      strcpy(task_arg3->arg2, "-1");
-      //发送播放结束
-      pthread_t thread4;
-      //创建线程
-      pthread_create(&thread4, NULL, video_return_write, (void *)task_arg3);
-      //回收子线程
-      pthread_join(thread4, NULL);
+  system("killall -9 mplayer");
 
-      printf("0000000000000000000\n");
-      sleep(1);
-      system("killall -9 mplayer");
-      loading_video_interface(video_head, pages, n);
-      break;
-    }
+  bzero(vdieo_cmd, sizeof(vdieo_cmd));
+  sprintf(vdieo_cmd,
+          "mplayer -slave -quiet -input file=/tmp/fifo %s &",
+          list->path);
+  mp = popen(vdieo_cmd, "r");
 
-    //从 暂停---->播放
-    if (is_key_area(p, 36, 442, 84, 480))
-    {
-      strcpy(pause, "1");
-      //创建任务参数
-      struct arg *task_arg = (struct arg *)malloc(sizeof(struct arg));
-      task_arg->arg1 = shmid;
-      task_arg->ptr[0] = (void *)rwlock;
-      task_arg->arg4[2] = pause;
+  //system(vdieo_cmd);
+  sprintf(seek, "seek %s\n", pos);
+  write(fifo_fd, seek, strlen(seek) + 1);
 
-      pthread_t thread;
-      //创建线程
-      pthread_create(&thread, NULL, pause_write_play_flag, (void *)task_arg);
-      //回收子线程
-      pthread_join(thread, NULL);
-      break;
-    }
-  }
-  printf("log-xmrs: 全屏控制结束 退出全屏\n");
+  // //发送进度
+  // while (1)
+  // {
+  //   sleep(1);
+  //   //获取进度
+  //   if (write(fifo_fd, "get_time_pos\n", strlen("get_time_pos\n")) != strlen("get_time_pos\n"))
+  //     perror("write get_time_pos");
+  //   do
+  //   {
+  //     bzero(buf, sizeof(buf));
+  //     fgets(buf, sizeof(buf), mp);
+  //     printf("%s", buf);
+  //   } while (strncmp(buf, "ANS_TIME_POSITION=", strlen("ANS_TIME_POSITION=")) != 0);
+  //   bzero(play_pos, sizeof(play_pos));
+  //   sscanf(buf, "%*[^=]=%s", play_pos);
+  //   //printf("play_pos %s \n", play_pos);
+
+  //   //创建任务参数
+  //   struct arg *task_arg = (struct arg *)malloc(sizeof(struct arg));
+  //   task_arg->arg1 = shmid;
+  //   task_arg->ptr[0] = (void *)rwlock;
+  //   task_arg->arg4[0] = play_pos; // 发送进度
+  //   pthread_t thread;
+  //   //创建线程
+  //   pthread_create(&thread, NULL, play_write_pos, (void *)task_arg);
+  //   //回收子线程
+  //   pthread_join(thread, NULL);
+  // }
+
+  close(fifo_fd);
 }
 
 /**
@@ -1085,46 +866,41 @@ void full_screen_control(int shmid, pthread_rwlock_t *rwlock, video_list_p video
 */
 void video_return_home(video_list_p video_head, int shmid, int msgid, pthread_rwlock_t *rwlock)
 {
+  char flag[2] = "-1";
   //创建任务参数
   struct arg *task_arg3 = (struct arg *)malloc(sizeof(struct arg));
   task_arg3->arg1 = shmid;
   task_arg3->ptr[0] = (void *)rwlock;
-  strcpy(task_arg3->arg2, "-1");
+  task_arg3->arg4[2] = flag;
   //发送播放结束
   pthread_t thread4;
   //创建线程
   pthread_create(&thread4, NULL, video_return_write, (void *)task_arg3);
   //回收子线程
   pthread_join(thread4, NULL);
+  sleep(1);
   //销毁读写锁
   pthread_rwlock_destroy(rwlock);
-  //销毁链表
   destroy_video_list(video_head);
-  sleep(1);
   // 删除消息队列
   if (msgctl(msgid, IPC_RMID, 0) == -1)
     fprintf(stderr, "msgctl(IPC_RMID) failed\n");
   // 删除共享内存
   if (shmctl(shmid, IPC_RMID, NULL) == -1)
     fprintf(stderr, "shmctl(IPC_RMID) failed\n");
-
-  printf("video_return_home 结束\n");
 }
 /**
  * 视频管理
 */
 void video_control(int *No, int tail, video_list_p video_head, thread_pool *pool, xy *p)
 {
-  int n = 1;               //视频序号
-  int page = 1;            //页码
+  int n = 1;
   bool flag = false;       //暂停标志位
   pthread_rwlock_t rwlock; //定义读写锁对象
-  bool full = true;        //全屏
   char buf[100];
   pid_t play_pid;
   pid_t bar_pid;
   char pos[4];
-  char pause[1] = {"1"};
   //初始化读写锁
   pthread_rwlock_init(&rwlock, NULL);
   int shmid;
@@ -1166,22 +942,6 @@ void video_control(int *No, int tail, video_list_p video_head, thread_pool *pool
     /*视频播放区域 播放按钮 未全屏*/
     if (is_key_area(p, 0, 0, 554, 420))
     {
-      printf("/*视频播放区域 播放按钮 未全屏*/\n");
-      // pid_t mplayer_id = get_pid("mplayer");
-      // if (mplayer_id == 0)
-      // {
-      //   // 播放
-      //   play_pid = fork();
-      //   if (play_pid == 0)
-      //   {
-      //     vdieo_play(shmid, msgid, &rwlock, find_video(video_head, &n), pos);
-      //   }
-      //   bar_pid = fork();
-      //   if (bar_pid == 0)
-      //   {
-      //     video_progress_bar(shmid, &rwlock);
-      //   }
-      // }
     }
     /*播放按钮*/
     else if (is_key_area(p, 0, 440, 67, 480))
@@ -1202,6 +962,7 @@ void video_control(int *No, int tail, video_list_p video_head, thread_pool *pool
         bar_pid = fork();
         if (bar_pid == 0)
         {
+          printf("111\n");
           video_progress_bar(shmid, &rwlock);
         }
       }
@@ -1215,66 +976,17 @@ void video_control(int *No, int tail, video_list_p video_head, thread_pool *pool
     else if (is_key_area(p, 310, 440, 352, 480))
     {
     }
-    /*全屏控制按钮*/
+    /*全屏按钮*/
     else if (is_key_area(p, 508, 440, 545, 480))
     {
+      full_screen(shmid, msgid, &rwlock, find_video(video_head, &n), p);
 
-      pid_t pid_full_screen = fork();
-      if (pid_full_screen == 0)
-      {
-        full_screen(shmid, msgid, &rwlock, find_video(video_head, &n), p);
-        //full = false;
-      }
-      /*全屏控制*/
-      if (pid_full_screen > 0)
-      {
-        get_xy(p);
-
-        //创建任务参数
-        struct arg *task_arg31 = (struct arg *)malloc(sizeof(struct arg));
-        task_arg31->arg1 = shmid;
-        task_arg31->ptr[0] = (void *)&rwlock;
-        strcpy(task_arg31->arg2, "-1");
-        //发送播放结束
-        pthread_t thread4;
-        //创建线程
-        pthread_create(&thread4, NULL, video_return_write, (void *)task_arg31);
-        //回收子线程
-        pthread_join(thread4, NULL);
-
-        printf("0000000000000000000\n");
-        sleep(1);
-        system("killall -9 mplayer");
-        loading_video_interface(video_head, page, n);
-
-        sleep(1);
-        //创建任务参数 发送开始播放 “1”
-        struct arg *task_arg2 = (struct arg *)malloc(sizeof(struct arg));
-        task_arg2->arg1 = shmid;
-        task_arg2->ptr[0] = (void *)&rwlock;
-        task_arg2->arg4[2] = pause;
-
-        pthread_t thread;
-        //创建线程
-        pthread_create(&thread, NULL, pause_write_play_flag, (void *)task_arg2);
-        //回收子线程
-        pthread_join(thread, NULL);
-        // while (1)
-        // {
-        //   printf("333333333333333333333\n");
-        //   get_xy(p);
-        //   //点击屏幕
-        //   if (is_key_area(p, 0, 0, 800, 480))
-        //   {
-        //     full_screen_control(shmid, &rwlock, video_head, page, n, p);
-        //   }
-        //   if (!full)
-        //     break;
-        //   printf("------------------\n");
-        // }
-        // full = true;
-        // printf("===================\n");
-      }
+      // init_video_interface(video_head, &tail, 1);
+      // pid_t pid1 = fork();
+      // if (pid1 == 0)
+      // {
+      //   vdieo_play(shmid, msgid, &rwlock, find_video(video_head, &n), pos);
+      // }
     }
     // /*声音调节*/
     // else if (is_key_area(p,))
@@ -1284,13 +996,18 @@ void video_control(int *No, int tail, video_list_p video_head, thread_pool *pool
     else if (is_key_area(p, 555, 42, 800, 480))
     {
       video_list_handle(No, tail, p);
-      n = *No;
     }
   }
   video_return_home(video_head, shmid, msgid, &rwlock);
   wait(NULL);
   wait(NULL);
-  printf("视频管理 结束\n");
+  bzero(buf, sizeof(buf));
+  sprintf(buf, "kill -9 %d", play_pid);
+  system(buf);
+  bzero(buf, sizeof(buf));
+  sprintf(buf, "kill -9 %d", bar_pid);
+  system(buf);
+  exit(EXIT_SUCCESS);
 }
 
 /**
@@ -1299,8 +1016,8 @@ void video_control(int *No, int tail, video_list_p video_head, thread_pool *pool
 void video_interface(video_list_p video_head, xy *p)
 {
   int max;
-  int tail = 0; // 当前页总共个数
-  int No = 0;   // 当前页的第n个视频
+  int tail = 0;
+  int No = 0;
   // 线程池初始化
   thread_pool *pool = (thread_pool *)malloc(sizeof(thread_pool));
   //init_pool(pool, 3);
@@ -1313,5 +1030,4 @@ void video_interface(video_list_p video_head, xy *p)
   //   printf("x =%d \n", p->x);
   //   printf("y =%d \n", p->y);
   // }
-  exit(EXIT_SUCCESS);
 }

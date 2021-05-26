@@ -55,15 +55,14 @@ bool create_music_list(music_list_p head, char *song, char *singer, int index, i
 */
 void destroy_music_list(music_list_p head)
 {
-  music_list_p p = head->next;
+  music_list_p p = head;
   music_list_p q = p->next;
-  while (q != head)
+  while (p->next != head)
   {
     free(p);
     p = q;
-    q = p->next;
+    q = q->next;
   }
-  free(p);
   free(q);
 }
 
